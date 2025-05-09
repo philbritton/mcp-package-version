@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/sammcj/mcp-package-version/v2/internal/handlers"
+	"github.com/philbritton/mcp-package-version/v2/internal/handlers"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )

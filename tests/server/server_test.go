@@ -6,7 +6,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
-	"github.com/sammcj/mcp-package-version/v2/pkg/server"
+	"github.com/philbritton/mcp-package-version/v2/pkg/server"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -19,15 +19,15 @@ func TestToolSchemaValidation(t *testing.T) {
 
 	// This is the ideal approach if we had access to the fields or constructors:
 	/*
-	// Create a new server instance using the public constructor
-	s := server.NewPackageVersionServer("test", "test", "test")
+		// Create a new server instance using the public constructor
+		s := server.NewPackageVersionServer("test", "test", "test")
 
-	// Create a new MCP server
-	srv := mcpserver.NewMCPServer("test-server", "Test Server")
+		// Create a new MCP server
+		srv := mcpserver.NewMCPServer("test-server", "Test Server")
 
-	// Initialize the server, which registers all tools
-	err := s.Initialize(srv)
-	assert.NoError(t, err, "Server initialisation should not fail")
+		// Initialize the server, which registers all tools
+		err := s.Initialize(srv)
+		assert.NoError(t, err, "Server initialisation should not fail")
 	*/
 }
 
