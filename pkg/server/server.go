@@ -140,6 +140,7 @@ func (s *PackageVersionServer) Initialize(srv *mcpserver.MCPServer) error {
 	s.registerDockerTool(srv)
 	s.registerSwiftTool(srv)
 	s.registerGitHubActionsTool(srv)
+	s.registerDotNetTool(srv)
 
 	// Register empty resource and prompt handlers to handle resources/list and prompts/list requests
 	s.registerEmptyResourceHandlers(srv)
@@ -561,6 +562,50 @@ func (s *PackageVersionServer) registerSwiftTool(srv *mcpserver.MCPServer) {
 	srv.AddTool(swiftTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		s.logger.WithField("tool", "check_swift_versions").Debug("Received request")
 		return swiftHandler.GetLatestVersion(ctx, request.Params.Arguments)
+	})
+}
+
+// registerDotNetTool registers the .NET NuGet version checking tool
+func (s *PackageVersionServer) registerDotNetTool(srv *mcpserver.MCPServer) {
+	// Create .NET handler
+	dotNetHandler := handlers.NewDotNetHandler(s.logger, s.sharedCache)
+
+	// Define the tool
+	dotNetTool := mcp.NewTool("check_dotnet_versions",
+		mcp.WithDescription("Check latest stable versions for .NET NuGet packages."),
+		mcp.WithArray("dependencies",
+			mcp.Required(),
+			mcp.Description("Required: Array of .NET NuGet package dependencies."),
+			mcp.Items(map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"packageId":               map[string]interface{}{"type": "string", "description": "The ID of the NuGet package."},
+					"version":                 map[string]interface{}{"type": "string", "description": "Optional: The current version of the package."},
+					"isDevelopmentDependency": map[string]interface{}{"type": "boolean", "description": "Optional: Whether this is a development dependency."},
+					"targetFramework":         map[string]interface{}{"type": "string", "description": "Optional: The target framework for the dependency."},
+				},
+				"required": []string{"packageId"},
+			}),
+		),
+		mcp.WithObject("constraints",
+			mcp.Description("Optional: Constraints for specific packages (e.g., major version)."),
+			// Define properties for constraints if known, e.g.,
+			// "properties": map[string]interface{}{
+			// 	"examplePackage": map[string]interface{}{
+			// 		"type": "object",
+			// 		"properties": map[string]interface{}{
+			// 			"majorVersion":   map[string]interface{}{"type": "integer"},
+			// 			"excludePackage": map[string]interface{}{"type": "boolean"},
+			// 		},
+			// 	},
+			// },
+		),
+	)
+
+	// Add .NET handler
+	srv.AddTool(dotNetTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		s.logger.WithField("tool", "check_dotnet_versions").Debug("Received request")
+		return dotNetHandler.GetLatestVersion(ctx, request.Params.Arguments)
 	})
 }
 
