@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -38,15 +37,29 @@ func NewDotNetHandler(logger *logrus.Logger, cache *sync.Map) *DotNetHandler {
 	}
 }
 
+// NewDotNetHandlerWithClient creates a new DotNet handler with a custom HTTP client
+func NewDotNetHandlerWithClient(logger *logrus.Logger, cache *sync.Map, client HTTPClient) *DotNetHandler {
+	if cache == nil {
+		cache = &sync.Map{}
+	}
+	return &DotNetHandler{
+		client: client,
+		cache:  cache,
+		logger: logger,
+	}
+}
+
 // NuGetPackageInfo represents information about a NuGet package
 type NuGetPackageInfo struct {
 	Data []struct {
-		ID            string   `json:"id"`
-		Version       string   `json:"version"`
-		Description   string   `json:"description"`
-		Authors       string   `json:"authors"`
-		Versions      []string `json:"versions"`
-		LatestVersion string   `json:"latestVersion"`
+		ID          string `json:"id"`
+		Version     string `json:"version"`
+		Description string `json:"description"`
+		Authors     []string `json:"authors"`
+		Versions    []struct {
+			Version string `json:"version"`
+			ID      string `json:"@id"`
+		} `json:"versions"`
 	} `json:"data"`
 	TotalHits int `json:"totalHits"`
 }
@@ -88,6 +101,48 @@ func (h *DotNetHandler) getPackageInfo(packageName string) (*NuGetPackageInfo, e
 	h.cache.Store(cacheKey, &info)
 
 	return &info, nil
+}
+
+// getAvailableVersions extracts all available versions from package info
+func (h *DotNetHandler) getAvailableVersions(packageInfo *NuGetPackageInfo) []string {
+	if len(packageInfo.Data) == 0 {
+		return []string{}
+	}
+
+	var versions []string
+	
+	// Add the current/latest version
+	if packageInfo.Data[0].Version != "" {
+		versions = append(versions, packageInfo.Data[0].Version)
+	}
+	
+	// Add all versions from the versions array
+	for _, versionInfo := range packageInfo.Data[0].Versions {
+		if versionInfo.Version != "" {
+			// Check if version is already added to avoid duplicates
+			found := false
+			for _, existing := range versions {
+				if existing == versionInfo.Version {
+					found = true
+					break
+				}
+			}
+			if !found {
+				versions = append(versions, versionInfo.Version)
+			}
+		}
+	}
+	
+	// Sort versions using proper version comparison
+	sort.Slice(versions, func(i, j int) bool {
+		if cmp, err := CompareVersions(versions[i], versions[j]); err == nil {
+			return cmp < 0
+		}
+		// Fallback to string comparison if version parsing fails
+		return versions[i] < versions[j]
+	})
+	
+	return versions
 }
 
 // NuGetDependency represents a NuGet dependency in a .csproj file
@@ -247,25 +302,33 @@ func (h *DotNetHandler) GetLatestVersion(ctx context.Context, args map[string]in
 				// Extract available versions from package info
 				versions := packageInfo.Data[0].Versions
 				if len(versions) == 0 {
-					versions = []string{packageInfo.Data[0].Version}
+					// Fallback to the current version if no versions array
+					versions = []struct {
+						Version string `json:"version"`
+						ID      string `json:"@id"`
+					}{{Version: packageInfo.Data[0].Version, ID: ""}}
 				}
 
 				// Filter versions by major version constraint
 				var allowedVersions []string
 				majorConstraint := *constraint.MajorVersion
-				for _, version := range versions {
-					parts := strings.Split(version, ".")
-					if len(parts) > 0 {
-						// Use ExtractMajorVersion from utils.go
-						if major, err := ExtractMajorVersion(parts[0]); err == nil && major == majorConstraint {
-							allowedVersions = append(allowedVersions, version)
-						}
+				for _, versionInfo := range versions {
+					version := versionInfo.Version
+					if major, err := ExtractMajorVersion(version); err == nil && major == majorConstraint {
+						allowedVersions = append(allowedVersions, version)
 					}
 				}
 
 				if len(allowedVersions) > 0 {
-					// Sort versions and get the latest one
-					sort.Strings(allowedVersions)
+					// Sort versions and get the latest one that matches constraints
+					sort.Slice(allowedVersions, func(i, j int) bool {
+						// Use version comparison for proper sorting
+						if cmp, err := CompareVersions(allowedVersions[i], allowedVersions[j]); err == nil {
+							return cmp < 0
+						}
+						// Fallback to string comparison if version parsing fails
+						return allowedVersions[i] < allowedVersions[j]
+					})
 					latestVersion = allowedVersions[len(allowedVersions)-1]
 				}
 			}
