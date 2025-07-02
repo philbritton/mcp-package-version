@@ -4,6 +4,7 @@ package tests
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -200,6 +201,61 @@ func (c *MockClient) AddErrorResponse(urlPattern string, statusCode int, errorMe
 		MockResponse{
 			StatusCode: statusCode,
 			Body:       `{"error": "` + errorMessage + `"}`,
+			Headers:    map[string]string{"Content-Type": "application/json"},
+		},
+	)
+}
+
+// AddNuGetPackageResponse adds a mock response for NuGet registry
+func (c *MockClient) AddNuGetPackageResponse(packageName string, latestVersion string, versions []string) {
+	type NuGetVersion struct {
+		Version string `json:"version"`
+		ID      string `json:"@id"`
+	}
+
+	type NuGetData struct {
+		ID          string         `json:"id"`
+		Version     string         `json:"version"`
+		Description string         `json:"description"`
+		Authors     []string       `json:"authors"`
+		Versions    []NuGetVersion `json:"versions"`
+	}
+
+	type NuGetResponse struct {
+		Data      []NuGetData `json:"data"`
+		TotalHits int         `json:"totalHits"`
+	}
+
+	// Create versions array
+	var nugetVersions []NuGetVersion
+	for _, version := range versions {
+		nugetVersions = append(nugetVersions, NuGetVersion{
+			Version: version,
+			ID:      fmt.Sprintf("https://api.nuget.org/v3/registration5-gz-semver2/%s/%s.json", strings.ToLower(packageName), version),
+		})
+	}
+
+	response := NuGetResponse{
+		Data: []NuGetData{
+			{
+				ID:          packageName,
+				Version:     latestVersion,
+				Description: fmt.Sprintf("Mock description for %s", packageName),
+				Authors:     []string{"Mock Author"},
+				Versions:    nugetVersions,
+			},
+		},
+		TotalHits: 1,
+	}
+
+	// Convert to JSON
+	respBody, _ := json.Marshal(response)
+
+	c.AddMockResponse(
+		"azuresearch-usnc.nuget.org/query?q="+packageName,
+		MockResponse{
+			StatusCode: 200,
+			Body:       string(respBody),
 			Headers:    map[string]string{"Content-Type": "application/json"},
 		},
 	)
